@@ -9,6 +9,12 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddSingleton<RoomManager>();
 
+//builder.WebHost.ConfigureKestrel(options =>
+//{
+//    var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+//    options.ListenAnyIP(int.Parse(port));
+//});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
