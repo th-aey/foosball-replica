@@ -1,0 +1,72 @@
+﻿@page "/room/{Code}"
+@using FoosballArena.Models
+@using FoosballArena.Services
+@inject RoomManager Rooms
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Room @Code</PageTitle>
+
+@if (_info is null)
+{
+    <h3>Room not found</h3>
+    <p>The room may have closed.</p>
+    <button class="btn btn-primary" @onclick="GoLobby">Back to lobby</button>
+}
+else
+{
+    <h3>Room <span class="text-primary">@_info.Code</span></h3>
+    <p>Phase: <strong>@_info.Phase</strong> · Host: @_info.HostAlias · You are <strong>@(Alias ?? "?")</strong></p>
+
+    <h5>Players (@_info.PlayerCount/@_info.MaxPlayers)</h5>
+    <ul class="list-group mb-3" style="max-width: 24rem;">
+        @foreach (var p in _info.Participants.Where(p => p.Kind == ParticipantKind.Player))
+        {
+            <li class="list-group-item d-flex justify-content-between">
+                <span>@p.Alias</span>
+                <span class="badge bg-secondary">Team @p.Team</span>
+            </li>
+        }
+    </ul>
+
+    <h5>Spectators (@_info.SpectatorCount)</h5>
+    <ul class="list-group mb-3" style="max-width: 24rem;">
+        @foreach (var p in _info.Participants.Where(p => p.Kind == ParticipantKind.Spectator))
+        {
+            <li class="list-group-item">@p.Alias</li>
+        }
+    </ul>
+
+    <button class="btn btn-secondary" @onclick="Leave">Leave to lobby</button>
+}
+
+@code {
+    [Parameter] public string Code { get; set; } = "";
+    [SupplyParameterFromQuery] public string? Alias { get; set; }
+
+    private RoomInfo? _info;
+
+    protected override void OnInitialized()
+    {
+        Rooms.RoomsChanged += OnRoomsChanged;
+        Refresh();
+    }
+
+    private void OnRoomsChanged() => InvokeAsync(Refresh);
+
+    private void Refresh()
+    {
+        _info = Rooms.GetInfo(Code);
+        StateHasChanged();
+    }
+
+    private void Leave()
+    {
+        Rooms.LeaveRoom(Code, Alias ?? "");
+        GoLobby();
+    }
+
+    private void GoLobby() => Nav.NavigateTo("/lobby");
+
+    public void Dispose() => Rooms.RoomsChanged -= OnRoomsChanged;
+}

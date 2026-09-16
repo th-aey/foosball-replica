@@ -1,10 +1,13 @@
 using FoosballArena.Components;
+using FoosballArena.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddSingleton<RoomManager>();
 
 var app = builder.Build();
 
