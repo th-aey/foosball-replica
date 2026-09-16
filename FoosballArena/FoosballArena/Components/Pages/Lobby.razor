@@ -1,7 +1,95 @@
 ﻿@page "/lobby"
+@using FoosballArena.Models
+@using FoosballArena.Services
+@inject RoomManager Rooms
+@inject NavigationManager Nav
+@implements IDisposable
 
 <PageTitle>Lobby</PageTitle>
 
 <h1>Lobby</h1>
 
-<p>No games yet — you'll create one here soon.</p>
+<div class="d-flex gap-2 align-items-end mb-3">
+    <div>
+        <label class="form-label mb-1">Your alias</label>
+        <input class="form-control" @bind-value="_alias" @bind-value:event="oninput" maxlength="16" placeholder="e.g. Striker10" style="width: 14rem;" />
+    </div>
+    <button class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_alias)" @onclick="CreateRoom">Create room</button>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger py-2">@_error</div>
+}
+
+<table class="table table-hover align-middle">
+    <thead>
+        <tr><th>Code</th><th>Host</th><th>Phase</th><th>Players</th><th>Spectators</th><th></th></tr>
+    </thead>
+    <tbody>
+        @foreach (var r in _rooms)
+        {
+            <tr>
+                <td><strong>@r.Code</strong></td>
+                <td>@r.HostAlias</td>
+                <td><span class="badge @(r.Phase == RoomPhase.Active ? "bg-danger" : "bg-success")">@r.Phase</span></td>
+                <td>@r.PlayerCount / @r.MaxPlayers</td>
+                <td>@r.SpectatorCount</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-primary me-1" disabled="@string.IsNullOrWhiteSpace(_alias)"
+                            @onclick='() => Join(r.Code, ParticipantKind.Player)'>
+                        Join
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@string.IsNullOrWhiteSpace(_alias)"
+                            @onclick='() => Join(r.Code, ParticipantKind.Spectator)'>
+                        Spectate
+                    </button>
+                </td>
+            </tr>
+        }
+        @if (_rooms.Count == 0)
+        {
+            <tr><td colspan="6" class="text-muted">No rooms yet — create one!</td></tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private string _alias = "";
+    private string? _error;
+    private List<RoomSummary> _rooms = new();
+
+    protected override void OnInitialized()
+    {
+        _rooms = Rooms.GetSummaries();
+        Rooms.RoomsChanged += OnRoomsChanged;   // subscribe: lobby re-renders on ANY room change
+    }
+
+    private void OnRoomsChanged() => InvokeAsync(() =>
+    {
+        _rooms = Rooms.GetSummaries();
+        StateHasChanged();
+    });
+
+    private void CreateRoom()
+    {
+        if (string.IsNullOrWhiteSpace(_alias))
+        {
+            _error = "Enter an alias first.";
+            return;
+        }
+        var alias = _alias.Trim();
+        var code = Rooms.CreateRoom(alias);
+        Nav.NavigateTo($"/room/{code}?alias={Uri.EscapeDataString(alias)}");
+    }
+
+    private void Join(string code, ParticipantKind kind)
+    {
+        _error = null;
+        var result = Rooms.JoinRoom(code, _alias.Trim(), kind);
+        if (!result.Success) { _error = result.Error; return; }
+        Nav.NavigateTo($"/room/{code}?alias={Uri.EscapeDataString(_alias.Trim())}");
+    }
+
+    public void Dispose() => Rooms.RoomsChanged -= OnRoomsChanged;   // always unsubscribe!
+}
