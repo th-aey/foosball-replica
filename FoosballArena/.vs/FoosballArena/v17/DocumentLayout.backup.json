@@ -1,0 +1,54 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\Student\\Downloads\\FoosballArena\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{1817D7A8-6501-4FF5-9B7F-4EC91C5C6AD5}|FoosballArena\\FoosballArena.csproj|c:\\users\\student\\downloads\\foosballarena\\foosballarena\\components\\layout\\navmenu.razor||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{1817D7A8-6501-4FF5-9B7F-4EC91C5C6AD5}|FoosballArena\\FoosballArena.csproj|solutionrelative:foosballarena\\components\\layout\\navmenu.razor||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1817D7A8-6501-4FF5-9B7F-4EC91C5C6AD5}|FoosballArena\\FoosballArena.csproj|c:\\users\\student\\downloads\\foosballarena\\foosballarena\\components\\pages\\lobby.razor||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{1817D7A8-6501-4FF5-9B7F-4EC91C5C6AD5}|FoosballArena\\FoosballArena.csproj|solutionrelative:foosballarena\\components\\pages\\lobby.razor||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "NavMenu.razor",
+              "DocumentMoniker": "C:\\Users\\Student\\Downloads\\FoosballArena\\FoosballArena\\Components\\Layout\\NavMenu.razor",
+              "RelativeDocumentMoniker": "FoosballArena\\Components\\Layout\\NavMenu.razor",
+              "ToolTip": "C:\\Users\\Student\\Downloads\\FoosballArena\\FoosballArena\\Components\\Layout\\NavMenu.razor",
+              "RelativeToolTip": "FoosballArena\\Components\\Layout\\NavMenu.razor",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABgAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
+              "WhenOpened": "2026-09-15T10:27:32.899Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "Lobby.razor",
+              "DocumentMoniker": "C:\\Users\\Student\\Downloads\\FoosballArena\\FoosballArena\\Components\\Pages\\Lobby.razor",
+              "RelativeDocumentMoniker": "FoosballArena\\Components\\Pages\\Lobby.razor",
+              "ToolTip": "C:\\Users\\Student\\Downloads\\FoosballArena\\FoosballArena\\Components\\Pages\\Lobby.razor",
+              "RelativeToolTip": "FoosballArena\\Components\\Pages\\Lobby.razor",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAAAyAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
+              "WhenOpened": "2026-09-15T10:26:55.814Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
