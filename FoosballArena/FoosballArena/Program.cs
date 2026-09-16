@@ -9,6 +9,9 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddSingleton<RoomManager>();
 
+builder.Services.AddHostedService<GameLoopService>();
+builder.Services.AddHostedService<RoomCleanupService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

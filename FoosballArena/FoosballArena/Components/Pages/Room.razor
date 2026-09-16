@@ -15,25 +15,85 @@
 }
 else
 {
-    <h3>Room <span class="text-primary">@_info.Code</span></h3>
-    <p>Phase: <strong>@_info.Phase</strong> · Host: @_info.HostAlias · You are <strong>@(Alias ?? "?")</strong></p>
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <h3 class="mb-0">Room <span class="text-primary">@_info.Code</span></h3>
+        <span class="badge bg-dark">@_info.Phase</span>
+    </div>
+
+    @switch (_info.Phase)
+    {
+        case RoomPhase.Waiting:
+            <div class="alert alert-info d-flex align-items-center">
+                <span>Waiting for players — auto-starts at <strong>3 per side</strong> (currently @_info.PlayerCount).</span>
+                @if (IsHost)
+                {
+                    <button class="btn btn-sm btn-warning ms-auto" @onclick="ForceStart">Force start (test)</button>
+                }
+            </div>
+            break;
+
+        case RoomPhase.Countdown:
+            <div class="display-4 text-center my-4">Starting in @Clock(_info.SecondsLeft)…</div>
+            break;
+
+        case RoomPhase.Active:
+            <div class="text-center my-3">
+                <div class="display-3">Team A @_info.ScoreA : @_info.ScoreB Team B</div>
+                <div class="fs-4 text-muted">Time left: @Clock(_info.SecondsLeft)</div>
+                @if (IsHost)
+                {
+                    <div class="mt-2">
+                        <span class="text-muted small me-2">TEST HOOKS — replaced by real physics in Session 4:</span>
+                        <button class="btn btn-sm btn-outline-danger me-1" @onclick='() => Rooms.ScoreGoal(Code, Team.A)'>Goal A</button>
+                        <button class="btn btn-sm btn-outline-primary" @onclick='() => Rooms.ScoreGoal(Code, Team.B)'>Goal B</button>
+                    </div>
+                }
+            </div>
+            break;
+
+        case RoomPhase.GoalReset:
+            <div class="text-center my-3">
+                <div class="display-4">GOAL! Resetting…</div>
+                <div class="fs-4">Team A @_info.ScoreA : @_info.ScoreB Team B</div>
+            </div>
+            break;
+
+        case RoomPhase.Finished:
+            <div class="text-center my-3">
+                <div class="display-4">Full time!</div>
+                <div class="fs-3">Team A @_info.ScoreA : @_info.ScoreB Team B — @ResultText</div>
+                <div class="fs-5 text-muted">Next match in @_info.SecondsLeft s</div>
+            </div>
+            break;
+    }
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger py-2">@_error</div>
+    }
 
     <h5>Players (@_info.PlayerCount/@_info.MaxPlayers)</h5>
-    <ul class="list-group mb-3" style="max-width: 24rem;">
+    <ul class="list-group mb-3" style="max-width: 26rem;">
         @foreach (var p in _info.Participants.Where(p => p.Kind == ParticipantKind.Player))
         {
-            <li class="list-group-item d-flex justify-content-between">
-                <span>@p.Alias</span>
+            <li class="list-group-item d-flex justify-content-between @(p.Alias == Alias ? "list-group-item-success" : "")">
+                <span>@p.Alias @(p.Alias == Alias ? "(you)" : "")</span>
                 <span class="badge bg-secondary">Team @p.Team</span>
             </li>
         }
     </ul>
 
     <h5>Spectators (@_info.SpectatorCount)</h5>
-    <ul class="list-group mb-3" style="max-width: 24rem;">
+    <ul class="list-group mb-3" style="max-width: 26rem;">
         @foreach (var p in _info.Participants.Where(p => p.Kind == ParticipantKind.Spectator))
         {
-            <li class="list-group-item">@p.Alias</li>
+            <li class="list-group-item @(p.Alias == Alias ? "list-group-item-success" : "")">
+                @p.Alias @(p.Alias == Alias ? "(you)" : "")
+                @if (p.Queued)
+                {
+                    <span class="badge bg-warning text-dark ms-1">queued for next match</span>
+                }
+            </li>
         }
     </ul>
 
@@ -43,13 +103,29 @@ else
 @code {
     [Parameter] public string Code { get; set; } = "";
     [SupplyParameterFromQuery] public string? Alias { get; set; }
+    [SupplyParameterFromQuery] public string? Token { get; set; }
 
     private RoomInfo? _info;
+    private string? _error;
+    private System.Threading.Timer? _heartbeat;
+
+    private bool IsHost => _info is not null && _info.HostToken == Token;
+
+    private string ResultText => _info is null ? ""
+        : _info.ScoreA == _info.ScoreB ? "Draw"
+        : _info.ScoreA > _info.ScoreB ? "Team A wins" : "Team B wins";
 
     protected override void OnInitialized()
     {
         Rooms.RoomsChanged += OnRoomsChanged;
         Refresh();
+
+        // Presence ping: "I'm alive". If this stops (tab closed, crash),
+        // SweepStale removes us after the timeout. It touches no UI state,
+        // so no InvokeAsync/StateHasChanged is needed here.
+        _heartbeat = new System.Threading.Timer(
+            _ => Rooms.Heartbeat(Code, Token ?? ""),
+            null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
 
     private void OnRoomsChanged() => InvokeAsync(Refresh);
@@ -60,13 +136,25 @@ else
         StateHasChanged();
     }
 
+    private void ForceStart()
+    {
+        var result = Rooms.ForceStart(Code, Token ?? "");
+        _error = result.Success ? null : result.Error;
+    }
+
     private void Leave()
     {
-        Rooms.LeaveRoom(Code, Alias ?? "");
+        Rooms.LeaveRoom(Code, Token ?? "");
         GoLobby();
     }
 
     private void GoLobby() => Nav.NavigateTo("/lobby");
 
-    public void Dispose() => Rooms.RoomsChanged -= OnRoomsChanged;
+    private static string Clock(int seconds) => $"{seconds / 60}:{seconds % 60:D2}";
+
+    public void Dispose()
+    {
+        Rooms.RoomsChanged -= OnRoomsChanged;
+        _heartbeat?.Dispose();
+    }
 }

@@ -24,7 +24,7 @@
 
 <table class="table table-hover align-middle">
     <thead>
-        <tr><th>Code</th><th>Host</th><th>Phase</th><th>Players</th><th>Spectators</th><th></th></tr>
+        <tr><th>Code</th><th>Host</th><th>Phase</th><th>Players</th><th>Spectators</th><th>Score</th><th></th></tr>
     </thead>
     <tbody>
         @foreach (var r in _rooms)
@@ -35,6 +35,7 @@
                 <td><span class="badge @(r.Phase == RoomPhase.Active ? "bg-danger" : "bg-success")">@r.Phase</span></td>
                 <td>@r.PlayerCount / @r.MaxPlayers</td>
                 <td>@r.SpectatorCount</td>
+                <td>@(r.Phase == RoomPhase.Active ? $"{r.ScoreA}:{r.ScoreB}" : "—")</td>
                 <td class="text-end">
                     <button class="btn btn-sm btn-primary me-1" disabled="@string.IsNullOrWhiteSpace(_alias)"
                             @onclick='() => Join(r.Code, ParticipantKind.Player)'>
@@ -49,7 +50,7 @@
         }
         @if (_rooms.Count == 0)
         {
-            <tr><td colspan="6" class="text-muted">No rooms yet — create one!</td></tr>
+            <tr><td colspan="7" class="text-muted">No rooms yet — create one!</td></tr>
         }
     </tbody>
 </table>
@@ -73,22 +74,18 @@
 
     private void CreateRoom()
     {
-        if (string.IsNullOrWhiteSpace(_alias))
-        {
-            _error = "Enter an alias first.";
-            return;
-        }
         var alias = _alias.Trim();
-        var code = Rooms.CreateRoom(alias);
-        Nav.NavigateTo($"/room/{code}?alias={Uri.EscapeDataString(alias)}");
+        var (code, token) = Rooms.CreateRoom(alias);
+        Nav.NavigateTo($"/room/{code}?alias={Uri.EscapeDataString(alias)}&token={token}");
     }
 
     private void Join(string code, ParticipantKind kind)
     {
+        if (string.IsNullOrWhiteSpace(_alias)) { _error = "Enter an alias first."; return; }
         _error = null;
         var result = Rooms.JoinRoom(code, _alias.Trim(), kind);
         if (!result.Success) { _error = result.Error; return; }
-        Nav.NavigateTo($"/room/{code}?alias={Uri.EscapeDataString(_alias.Trim())}");
+        Nav.NavigateTo($"/room/{code}?alias={Uri.EscapeDataString(_alias.Trim())}&token={result.Token}");
     }
 
     public void Dispose() => Rooms.RoomsChanged -= OnRoomsChanged;   // always unsubscribe!
