@@ -66,6 +66,50 @@ else
             </div>
             break;
     }
+    @if (MySlot is not null)
+    {
+        <div class="mb-3" style="max-width: 26rem;">
+            <div class="d-flex justify-content-between">
+                <span>You play: <strong>@MySlot.Line</strong> (Team @MySlot.Team)</span>
+                <span class="text-muted small">X = @((int)MySlot.X)</span>
+            </div>
+            <div class="position-relative border rounded" style="height: 26px; background: #f8f9fa;">
+                <div class="position-absolute bg-info bg-opacity-25"
+                     style="left:@(Fmt(MySlot.ZoneMin))%; width:@(Fmt(MySlot.ZoneMax - MySlot.ZoneMin))%; top:0; bottom:0;"></div>
+                <div class="position-absolute bg-primary rounded-circle"
+                     style="left:calc(@(Fmt(MySlot.X))% - 6px); width:12px; height:12px; top:7px;"></div>
+            </div>
+        </div>
+
+        @if (_info.Phase is RoomPhase.Active or RoomPhase.Countdown or RoomPhase.GoalReset)
+        {
+            <div class="d-flex gap-2 mb-3">
+                <button class="btn btn-outline-primary"
+                        @onmousedown='() => Rooms.SetMove(Code, Token ?? "", -1)'
+                        @onmouseup='() => Rooms.SetMove(Code, Token ?? "", 0)'
+                        @onmouseleave='() => Rooms.SetMove(Code, Token ?? "", 0)'>
+                    &#9664; Move left
+                </button>
+                <button class="btn btn-outline-primary"
+                        @onmousedown='() => Rooms.SetMove(Code, Token ?? "", 1)'
+                        @onmouseup='() => Rooms.SetMove(Code, Token ?? "", 0)'
+                        @onmouseleave='() => Rooms.SetMove(Code, Token ?? "", 0)'>
+                    Move right &#9654;
+                </button>
+            </div>
+        }
+    }
+
+    @if (_info.Slots.Count > 0)
+    {
+        <h5>Lines</h5>
+        @foreach (var g in _info.Slots.GroupBy(s => (s.Team, s.Line)))
+        {
+            <div class="small text-muted">
+                Team @g.Key.Team @g.Key.Line: @string.Join(", ", g.Select(p => p.Alias))
+            </div>
+        }
+    }
 
     @if (_error is not null)
     {
@@ -114,6 +158,10 @@ else
     private string ResultText => _info is null ? ""
         : _info.ScoreA == _info.ScoreB ? "Draw"
         : _info.ScoreA > _info.ScoreB ? "Team A wins" : "Team B wins";
+
+    private SlotInfo? MySlot => _info?.Slots.FirstOrDefault(s => s.Token == Token);
+
+    private static string Fmt(float v) => ((int)v).ToString();
 
     protected override void OnInitialized()
     {

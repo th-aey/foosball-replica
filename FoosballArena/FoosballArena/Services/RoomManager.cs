@@ -12,13 +12,15 @@ public class RoomManager
     public const int MaxPlayersPerRoom = 40;
 
     private static readonly TimeSpan Countdown = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan MatchLength = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan MatchLength = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan GoalReset = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan Intermission = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(15);
 
     private readonly object _gate = new();
     private readonly Dictionary<string, Room> _rooms = new();
+
+    private DateTime _lastTick = DateTime.UtcNow;
 
     public event Action? RoomsChanged;
 
@@ -42,13 +44,18 @@ public class RoomManager
         lock (_gate)
         {
             if (!_rooms.TryGetValue(code, out var r)) return null;
+            var aliases = r.Participants.ToDictionary(p => p.Token, p => p.Alias);
             var queued = r.PlayerQueue.ToHashSet();
             return new RoomInfo(
-                r.Code, r.HostAlias, r.HostToken, r.Phase, r.MaxPlayers,
-                r.ScoreA, r.ScoreB, DisplayedSecond(r, DateTime.UtcNow),
-                r.Participants.Select(p => new ParticipantInfo(
-                    p.Alias, p.Kind, p.Team, queued.Contains(p.Token))).ToList(),
-                r.PlayerQueue.Count);
+            r.Code, r.HostAlias, r.HostToken, r.Phase, r.MaxPlayers,
+            r.ScoreA, r.ScoreB, DisplayedSecond(r, DateTime.UtcNow),
+            r.Participants.Select(p => new ParticipantInfo(
+                p.Alias, p.Kind, p.Team, queued.Contains(p.Token))).ToList(),
+            r.PlayerQueue.Count,
+            r.Slots.Values.OrderBy(s => s.Team).ThenBy(s => s.LineY).ThenBy(s => s.ZoneMin)
+                .Select(s => new SlotInfo(s.Token, aliases[s.Token], s.Team, s.Line,
+                                          s.ZoneMin, s.ZoneMax, s.X))
+                .ToList());
         }
     }
 
@@ -118,6 +125,7 @@ public class RoomManager
         {
             if (!_rooms.TryGetValue(code, out var room)) return;
             room.Participants.RemoveAll(p => p.Token == token);
+            RebuildSlotsLocked(room);
             var remaining = room.PlayerQueue.Where(t => t != token).ToList();
             room.PlayerQueue.Clear();
             foreach (var t in remaining) room.PlayerQueue.Enqueue(t);
@@ -163,8 +171,14 @@ public class RoomManager
         lock (_gate)
         {
             var now = DateTime.UtcNow;
+            var dt = Math.Min((now - _lastTick).TotalSeconds, 0.25); // clamp: avoids a jump after debugger pauses
+            _lastTick = now;
+
             foreach (var room in _rooms.Values.ToList())
+            {
+                IntegrateLocked(room, dt);
                 changed |= AdvanceLocked(room, now);
+            }
         }
         if (changed) RaiseChanged();
     }
@@ -179,7 +193,7 @@ public class RoomManager
             {
                 var before = room.Participants.Count;
                 room.Participants.RemoveAll(p => p.LastSeen < cutoff);
-
+                RebuildSlotsLocked(room);
                 var alive = room.Participants.Select(p => p.Token).ToHashSet();
                 var stillQueued = room.PlayerQueue.Where(alive.Contains).ToList();
                 room.PlayerQueue.Clear();
@@ -228,13 +242,19 @@ public class RoomManager
         // Raise the UI event at most once per displayed second — a wall clock
         // doesn't need 5 updates/sec, and 40 clients × 5/sec would churn circuits.
         var shown = DisplayedSecond(room, now);
-        var changed = transitioned || shown != room.LastShownSecond;
+        // Movement throttle: raise if anyone slid 3+ units since the last raise
+        var moved = room.Slots.Values.Any(s => Math.Abs(s.X - s.LastRaisedX) >= 3f);
+        if (moved)
+            foreach (var s in room.Slots.Values)
+                s.LastRaisedX = s.X;
+        var changed = transitioned || shown != room.LastShownSecond || moved;
         room.LastShownSecond = shown;
         return changed;
     }
 
     private static void StartCountdownLocked(Room room, DateTime now)
     {
+        RebuildSlotsLocked(room);
         room.ScoreA = 0;
         room.ScoreB = 0;
         room.Phase = RoomPhase.Countdown;
@@ -276,6 +296,46 @@ public class RoomManager
             var code = new string(Enumerable.Range(0, 4)
                 .Select(_ => alphabet[Random.Shared.Next(alphabet.Length)]).ToArray());
             if (!_rooms.ContainsKey(code)) return code;
+        }
+    }
+
+    /// <summary>Input: set my lateral movement direction. Called per button-press, not per frame.</summary>
+    public void SetMove(string code, string token, double dir)
+    {
+        lock (_gate)
+        {
+            if (_rooms.TryGetValue(code, out var room) &&
+                room.Slots.TryGetValue(token, out var slot))
+            {
+                slot.MoveDir = Math.Clamp(dir, -1.0, 1.0);
+            }
+        }
+    }
+
+    /// <summary>Recompute the whole formation (join order → lines → tiled zones). Keeps X where valid.</summary>
+    private static void RebuildSlotsLocked(Room room)
+    {
+        var previousX = room.Slots.ToDictionary(kv => kv.Key, kv => kv.Value.X);
+        room.Slots.Clear();
+
+        foreach (var kv in Formation.Assign(room.Participants))
+        {
+            if (previousX.TryGetValue(kv.Key, out var x))
+                kv.Value.X = Math.Clamp(x, kv.Value.ZoneMin, kv.Value.ZoneMax);
+            room.Slots[kv.Key] = kv.Value;
+        }
+    }
+
+    private static void IntegrateLocked(Room room, double dtSeconds)
+    {
+        // Positioning is allowed while lining up (countdown) and during play
+        if (room.Phase is not (RoomPhase.Active or RoomPhase.Countdown or RoomPhase.GoalReset))
+            return;
+
+        foreach (var s in room.Slots.Values)
+        {
+            if (s.MoveDir == 0) continue;
+            s.X = Math.Clamp((float)(s.X + s.MoveDir * Pitch.PlayerSpeed * dtSeconds), s.ZoneMin, s.ZoneMax);
         }
     }
 
