@@ -49,6 +49,9 @@ public class Room
     public List<RoomParticipant> Participants { get; } = new();
     public Queue<string> PlayerQueue { get; } = new(); // tokens queued for next match
 
+    /// <summary>Formation slots per token. Mutated only by RoomManager under its lock.</summary>
+    public Dictionary<string, PlayerSlot> Slots { get; } = new();
+
     public int PlayerCount => Participants.Count(p => p.Kind == ParticipantKind.Player);
     public int SpectatorCount => Participants.Count(p => p.Kind == ParticipantKind.Spectator);
     public int CountTeam(Team team) => Participants.Count(p => p.Kind == ParticipantKind.Player && p.Team == team);
@@ -61,7 +64,8 @@ public sealed record ParticipantInfo(string Alias, ParticipantKind Kind, Team Te
 public sealed record RoomInfo(
     string Code, string HostAlias, string HostToken, RoomPhase Phase,
     int MaxPlayers, int ScoreA, int ScoreB, int SecondsLeft,
-    IReadOnlyList<ParticipantInfo> Participants, int QueuedCount)
+    IReadOnlyList<ParticipantInfo> Participants, int QueuedCount,
+    IReadOnlyList<SlotInfo> Slots)
 {
     public int PlayerCount => Participants.Count(p => p.Kind == ParticipantKind.Player);
     public int SpectatorCount => Participants.Count(p => p.Kind == ParticipantKind.Spectator);
