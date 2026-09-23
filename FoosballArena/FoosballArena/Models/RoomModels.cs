@@ -29,7 +29,11 @@ public class Room
 
     public string Code { get; }
     public string HostAlias { get; }
+    public string Name { get; set; }
+    public bool IsPrivate { get; set; }
     public string HostToken { get; }
+    public int TeamAId { get; set; } = 1;
+    public int TeamBId { get; set; } = 2;
     public DateTime CreatedAt { get; }
 
     public RoomPhase Phase { get; set; } = RoomPhase.Waiting;
@@ -72,8 +76,8 @@ public sealed record RoomInfo(
 }
 
 public sealed record RoomSummary(
-    string Code, string HostAlias, RoomPhase Phase,
-    int PlayerCount, int MaxPlayers, int SpectatorCount, int ScoreA, int ScoreB);
+    string Code, string Name, string HostAlias, RoomPhase Phase,
+    int PlayerCount, int MaxPlayers, int SpectatorCount, int TeamAId, int TeamBId, int ScoreA, int ScoreB, bool IsPrivate);
 
 public readonly record struct JoinResult(bool Success, string? Error, string Token)
 {
