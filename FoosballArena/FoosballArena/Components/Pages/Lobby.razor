@@ -1,92 +1,340 @@
 ﻿@page "/lobby"
 @using FoosballArena.Models
 @using FoosballArena.Services
+@implements IDisposable
 @inject RoomManager Rooms
 @inject NavigationManager Nav
-@implements IDisposable
 
-<PageTitle>Lobby</PageTitle>
+<PageTitle>Lobby — Foosball Arena</PageTitle>
 
-<h1>Lobby</h1>
+<div class="lobby">
 
-<div class="d-flex gap-2 align-items-end mb-3">
-    <div>
-        <label class="form-label mb-1">Your alias</label>
-        <input class="form-control" @bind-value="_alias" @bind-value:event="oninput" maxlength="16" placeholder="e.g. Striker10" style="width: 14rem;" />
-    </div>
-    <button class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_alias)" @onclick="CreateRoom">Create room</button>
+    @* ================= header ================= *@
+    <header class="lobby-header">
+        <div class="brand">
+            <span class="brand-ball"></span>
+            <h1>Foosball Arena</h1>
+        </div>
+        <div class="alias-box">
+            <input placeholder="Guest Player" maxlength="16" @bind="_alias" @bind:event="oninput" />
+            <button class="btn btn-ghost" @onclick="SaveAlias">Save</button>
+        </div>
+    </header>
+
+    @* ================= hero ================= *@
+    <section class="hero">
+        <div class="hero-copy">
+            <h2>Grab a rod. Or rather — <em>be</em> the rod.</h2>
+            <p>Create a match, share the code, and play with up to 40 friends on one table — from any device.</p>
+            <div class="hero-actions">
+                <button class="btn btn-primary" @onclick="OpenCreate">Create Room</button>
+                <button class="btn btn-ghost" @onclick="QuickJoin">Quick Join</button>
+            </div>
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="error-line">@_error</div>
+            }
+        </div>
+        <div class="hero-circle">
+            <svg viewBox="0 0 120 74" aria-hidden="true">
+                <rect x="3" y="3" width="114" height="68" rx="8" fill="#101318" stroke="#2a2f38" stroke-width="2" />
+                <line x1="60" y1="7" x2="60" y2="67" stroke="#2a2f38" stroke-width="1.5" />
+                <circle cx="60" cy="37" r="11" fill="none" stroke="#2a2f38" stroke-width="1.5" />
+                <circle cx="60" cy="37" r="3" fill="#f0652e" />
+                <rect x="1" y="24" width="4" height="26" rx="2" fill="#f0b429" />
+                <rect x="115" y="24" width="4" height="26" rx="2" fill="#38bdf8" />
+                <circle cx="34" cy="37" r="4" fill="#f0b429" />
+                <circle cx="86" cy="37" r="4" fill="#ef4444" />
+            </svg>
+        </div>
+    </section>
+
+    @* ================= search · filter · join by code ================= *@
+    <section class="filter-bar">
+        <input class="search" placeholder="Search room or team…" @bind="_search" @bind:event="oninput" />
+
+        <div class="filter-pills">
+            <button class="pill @(_filter == 0 ? "pill-on" : "")" @onclick="() => _filter = 0">All</button>
+            <button class="pill @(_filter == 1 ? "pill-on" : "")" @onclick="() => _filter = 1">Waiting</button>
+            <button class="pill @(_filter == 2 ? "pill-on" : "")" @onclick="() => _filter = 2">In match</button>
+        </div>
+
+        <div class="join-code">
+            <input placeholder="CODE" maxlength="4" @bind="_code" @bind:event="oninput"
+                   @onkeydown="OnCodeKey" />
+            <button class="btn btn-ghost" @onclick="JoinByCode">Join</button>
+        </div>
+    </section>
+
+    @* ================= room cards ================= *@
+    <section class="room-grid">
+        @foreach (var r in VisibleRooms)
+        {
+            <article class="room-card">
+                <div class="fixture">
+                    <span class="crest sm" style="background:@TeamOf(r.TeamAId).Primary;color:@TeamOf(r.TeamAId).Secondary">@TeamOf(r.TeamAId).Initial</span>
+                    <span class="fx-name">@TeamOf(r.TeamAId).Name</span>
+                    <span class="fx-vs">vs</span>
+                    <span class="crest sm" style="background:@TeamOf(r.TeamBId).Primary;color:@TeamOf(r.TeamBId).Secondary">@TeamOf(r.TeamBId).Initial</span>
+                    <span class="fx-name">@TeamOf(r.TeamBId).Name</span>
+                </div>
+
+                <div class="card-meta">
+                    <span class="pill @PillClass(r)">@PhaseLabel(r.Phase)</span>
+                    @if (r.Phase != RoomPhase.Waiting)
+                    {
+                        <span class="score-chip">@r.ScoreA : @r.ScoreB</span>
+                    }
+                    <span class="meta-people">@r.PlayerCount playing · @r.SpectatorCount watching</span>
+                </div>
+
+                <div class="card-code">Room code <b>@r.Code</b> · host @r.HostAlias</div>
+
+                <div class="card-actions">
+                    @if (r.Phase == RoomPhase.Waiting && r.PlayerCount >= RoomManager.MaxPlayersPerRoom)
+                    {
+                        <button class="btn btn-dim" disabled>Full room</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-primary" @onclick="() => Join(r.Code, false)">
+                            @(r.Phase == RoomPhase.Waiting ? "Join" : "Join queue")
+                        </button>
+                    }
+                    <button class="btn btn-ghost" @onclick="() => Join(r.Code, true)">Spectate</button>
+                </div>
+            </article>
+        }
+
+        @if (!VisibleRooms.Any())
+        {
+            <div class="empty-state">
+                <p>No rooms match. Be the host — create one.</p>
+            </div>
+        }
+    </section>
+
+    <footer class="lobby-foot">
+        Tip: share the 4-letter room code — friends join from any device. Phones tilt, keyboards steer.
+    </footer>
 </div>
 
-@if (_error is not null)
+@if (_showCreate)
 {
-    <div class="alert alert-danger py-2">@_error</div>
-}
+    <div class="modal-backdrop" @onclick="CloseCreate">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <h2>New Match</h2>
+                <button class="modal-x" @onclick="CloseCreate">✕</button>
+            </div>
 
-<table class="table table-hover align-middle">
-    <thead>
-        <tr><th>Code</th><th>Host</th><th>Phase</th><th>Players</th><th>Spectators</th><th>Score</th><th></th></tr>
-    </thead>
-    <tbody>
-        @foreach (var r in _rooms)
-        {
-            <tr>
-                <td><strong>@r.Code</strong></td>
-                <td>@r.HostAlias</td>
-                <td><span class="badge @(r.Phase == RoomPhase.Active ? "bg-danger" : "bg-success")">@r.Phase</span></td>
-                <td>@r.PlayerCount / @r.MaxPlayers</td>
-                <td>@r.SpectatorCount</td>
-                <td>@(r.Phase == RoomPhase.Active ? $"{r.ScoreA}:{r.ScoreB}" : "—")</td>
-                <td class="text-end">
-                    <button class="btn btn-sm btn-primary me-1" disabled="@string.IsNullOrWhiteSpace(_alias)"
-                            @onclick='() => Join(r.Code, ParticipantKind.Player)'>
-                        Join
+            <div class="slot-row">
+                <div class="team-slot @(_slotA > 0 ? "filled" : "") @(_activeSlot == 1 ? "active" : "")"
+                     @onclick="() => ClearSlot(1)">
+                    @if (_slotA == 0)
+                    {
+                        <span class="slot-hint">Pick your team</span>
+                    }
+                    else
+                    {
+                        var ta = TeamOf(_slotA);
+                        <span class="crest" style="background:@ta.Primary;color:@ta.Secondary">@ta.Initial</span>
+                        <span class="slot-name">@ta.Name</span>
+                    }
+                </div>
+
+                <span class="vs">VS</span>
+
+                <div class="team-slot @(_slotB > 0 ? "filled" : "") @(_activeSlot == 2 ? "active" : "")"
+                     @onclick="() => ClearSlot(2)">
+                    @if (_slotB == 0)
+                    {
+                        <span class="slot-hint">Pick opponent</span>
+                    }
+                    else
+                    {
+                        var tb = TeamOf(_slotB);
+                        <span class="crest" style="background:@tb.Primary;color:@tb.Secondary">@tb.Initial</span>
+                        <span class="slot-name">@tb.Name</span>
+                    }
+                </div>
+            </div>
+
+            <button class="btn-shuffle" @onclick="Shuffle">Shuffle teams</button>
+
+            <div class="team-grid">
+                @foreach (var t in TeamCatalog.All)
+                {
+                    var used = t.Id == _slotA || t.Id == _slotB;
+                    <button class="team-card @(used ? "used" : "")"
+                            disabled="@used"
+                            @onclick="() => PickTeam(t.Id)">
+                        <span class="crest" style="background:@t.Primary;color:@t.Secondary">@t.Initial</span>
+                        <span class="tname">@t.Name</span>
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary" disabled="@string.IsNullOrWhiteSpace(_alias)"
-                            @onclick='() => Join(r.Code, ParticipantKind.Spectator)'>
-                        Spectate
-                    </button>
-                </td>
-            </tr>
-        }
-        @if (_rooms.Count == 0)
-        {
-            <tr><td colspan="7" class="text-muted">No rooms yet — create one!</td></tr>
-        }
-    </tbody>
-</table>
+                }
+            </div>
+
+            <button class="btn-kickoff" disabled="@(!CanKickOff)" @onclick="ConfirmCreate">
+                Kick Off
+            </button>
+        </div>
+    </div>
+}
 
 @code {
     private string _alias = "";
+    private string _code = "";
+    private string _search = "";
+    private int _filter;             // 0 = all · 1 = waiting · 2 = in match
     private string? _error;
-    private List<RoomSummary> _rooms = new();
+
+    // ---- 4.5c create-match popup state ----
+    private bool _showCreate;
+    private int _slotA;              // 0 = empty
+    private int _slotB;
+    private int _activeSlot = 1;     // where the next pick lands
+
+    private bool CanKickOff => _slotA > 0 && _slotB > 0 && _slotA != _slotB;
+
+    [SupplyParameterFromQuery] public string? Alias { get; set; }   // prefill when coming back from a room
 
     protected override void OnInitialized()
     {
-        _rooms = Rooms.GetSummaries();
-        Rooms.RoomsChanged += OnRoomsChanged;   // subscribe: lobby re-renders on ANY room change
+        if (!string.IsNullOrWhiteSpace(Alias)) _alias = Alias;
+        Rooms.RoomsChanged += OnRoomsChanged;
     }
 
-    private void OnRoomsChanged() => InvokeAsync(() =>
-    {
-        _rooms = Rooms.GetSummaries();
-        StateHasChanged();
-    });
+    private void OnRoomsChanged()
+        => _ = InvokeAsync(StateHasChanged);
 
-    private void CreateRoom()
+    public void Dispose()
+        => Rooms.RoomsChanged -= OnRoomsChanged;
+
+    private TeamDef TeamOf(int id) => TeamCatalog.GetOrFirst(id);
+
+    // ================= lists & labels =================
+
+    private IEnumerable<RoomSummary> VisibleRooms =>
+        Rooms.GetSummaries()
+             .Where(r => !r.IsPrivate)
+             .Where(r => PassesFilter(r.Phase))
+             .Where(MatchesSearch);
+
+    private bool PassesFilter(RoomPhase p) => _filter switch
     {
-        var alias = _alias.Trim();
-        var (code, token) = Rooms.CreateRoom(alias);
-        Nav.NavigateTo($"/room/{code}?alias={Uri.EscapeDataString(alias)}&token={token}");
+        1 => p == RoomPhase.Waiting,
+        2 => p != RoomPhase.Waiting,
+        _ => true
+    };
+
+    private bool MatchesSearch(RoomSummary r)
+    {
+        var q = _search.Trim();
+        if (q.Length == 0) return true;
+        return r.Code.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || (r.Name ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)
+            || TeamOf(r.TeamAId).Name.Contains(q, StringComparison.OrdinalIgnoreCase)
+            || TeamOf(r.TeamBId).Name.Contains(q, StringComparison.OrdinalIgnoreCase);
     }
 
-    private void Join(string code, ParticipantKind kind)
+    private static string PhaseLabel(RoomPhase p) => p switch
     {
-        if (string.IsNullOrWhiteSpace(_alias)) { _error = "Enter an alias first."; return; }
-        _error = null;
-        var result = Rooms.JoinRoom(code, _alias.Trim(), kind);
+        RoomPhase.Waiting => "Waiting",
+        RoomPhase.Countdown or RoomPhase.Active or RoomPhase.GoalReset => "In match",
+        RoomPhase.Finished => "Full time",
+        _ => p.ToString()
+    };
+
+    private static string PillClass(RoomSummary r) =>
+        r.Phase == RoomPhase.Waiting
+            ? (r.PlayerCount >= RoomManager.MaxPlayersPerRoom ? "pill-full" : "pill-waiting")
+            : "pill-live";
+
+    // ================= actions =================
+
+    private void SaveAlias()
+        => _error = string.IsNullOrWhiteSpace(_alias) ? "Type your alias first" : null;
+
+    // VERIFY 1 — the ONLY place a room URL is built.
+    // If your Room page route is not /room/{CODE}, fix it here once.
+    private void GoToRoom(string code, string token)
+        => Nav.NavigateTo($"/room/{code}?alias={Uri.EscapeDataString(_alias.Trim())}&token={token}");
+
+    // VERIFY 2 — must match your RoomManager.JoinRoom signature
+    // (assumed: JoinRoom(code, alias, asSpectator) → JoinResult)
+    private void Join(string code, bool asSpectator)
+    {
+        if (string.IsNullOrWhiteSpace(_alias)) { _error = "Type your alias first"; return; }
+        ParticipantKind kind = asSpectator ? ParticipantKind.Spectator : ParticipantKind.Player;
+            
+        var result = Rooms.JoinRoom(code, _alias.Trim(), kind );
         if (!result.Success) { _error = result.Error; return; }
-        Nav.NavigateTo($"/room/{code}?alias={Uri.EscapeDataString(_alias.Trim())}&token={result.Token}");
+        GoToRoom(code, result.Token!);
     }
 
-    public void Dispose() => Rooms.RoomsChanged -= OnRoomsChanged;   // always unsubscribe!
+    private void OnCodeKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") JoinByCode();
+    }
+
+    private void JoinByCode()
+    {
+        _code = _code.Trim().ToUpperInvariant();
+        if (_code.Length == 0) { _error = "Enter a room code"; return; }
+        Join(_code, false);
+    }
+
+    private void QuickJoin()
+    {
+        if (string.IsNullOrWhiteSpace(_alias)) { _error = "Type your alias first"; return; }
+        var target = Rooms.GetSummaries().FirstOrDefault(r =>
+            !r.IsPrivate && r.Phase == RoomPhase.Waiting && r.PlayerCount < RoomManager.MaxPlayersPerRoom);
+        if (target is null) { OpenCreate(); return; }   // nobody waiting? make a match
+        Join(target.Code, false);
+    }
+
+    // ================= 4.5c popup =================
+
+    private void OpenCreate()
+    {
+        if (string.IsNullOrWhiteSpace(_alias)) { _error = "Type your alias first"; return; }
+        _error = null;
+        _slotA = 0; _slotB = 0; _activeSlot = 1;
+        _showCreate = true;
+    }
+
+    private void CloseCreate() => _showCreate = false;
+
+    private void PickTeam(int id)
+    {
+        if (_slotA == id || _slotB == id) return;
+        if (_activeSlot == 1) { _slotA = id; _activeSlot = 2; }
+        else { _slotB = id; _activeSlot = 1; }
+    }
+
+    private void ClearSlot(int slot)
+    {
+        if (slot == 1) { _slotA = 0; _activeSlot = 1; }
+        else { _slotB = 0; _activeSlot = 2; }
+    }
+
+    private void Shuffle()
+    {
+        var rnd = Random.Shared;
+        int a = rnd.Next(TeamCatalog.All.Count);
+        int b = rnd.Next(TeamCatalog.All.Count - 1);
+        if (b >= a) b++;               // guaranteed to skip a → always distinct
+        _slotA = TeamCatalog.All[a].Id;
+        _slotB = TeamCatalog.All[b].Id;
+        _activeSlot = 1;
+    }
+
+    private void ConfirmCreate()
+    {
+        if (!CanKickOff) return;
+        var (code, token) = Rooms.CreateRoom(_alias.Trim(), false, _slotA, _slotB);
+        _showCreate = false;
+        GoToRoom(code, token);
+    }
 }

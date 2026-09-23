@@ -20,21 +20,27 @@ public class RoomManager
     private readonly object _gate = new();
     private readonly Dictionary<string, Room> _rooms = new();
 
+    private static readonly string[] Cities =
+        { "Cape Town", "Soweto", "Durban", "Joburg", "Pretoria", "Gqeberha", "Stellenbosch", "Hermanus", "Knysna", "Bloemfontein" };
+    private static readonly string[] Nouns =
+        { "Kickoff", "Spinners", "Dynamos", "Rovers", "Legends", "United", "Wanderers", "Titans", "Thunder", "Stars" };
+
     private DateTime _lastTick = DateTime.UtcNow;
 
     public event Action? RoomsChanged;
 
     // ---------- queries ----------
 
-    public List<RoomSummary> GetSummaries()
+    public List<RoomSummary> GetSummaries(bool includePrivate = false)
     {
         lock (_gate)
         {
             return _rooms.Values
+                .Where(r => includePrivate || !r.IsPrivate)
                 .OrderBy(r => r.CreatedAt)
-                .Select(r => new RoomSummary(r.Code, r.HostAlias, r.Phase,
-                                             r.PlayerCount, r.MaxPlayers, r.SpectatorCount,
-                                             r.ScoreA, r.ScoreB))
+                .Select(r => new RoomSummary(r.Code, r.Name, r.HostAlias, r.Phase,
+                                             r.PlayerCount, r.MaxPlayers, r.SpectatorCount,r.TeamAId, r.TeamBId,
+                                             r.ScoreA, r.ScoreB, r.IsPrivate))
                 .ToList();
         }
     }
@@ -61,14 +67,27 @@ public class RoomManager
 
     // ---------- commands ----------
 
-    public (string Code, string Token) CreateRoom(string alias)
+    public (string Code, string Token) CreateRoom(string alias, bool isPrivate, int teamAId, int teamBId)
     {
         string code, token;
         lock (_gate)
         {
+            // Server is the law: even though the popup blocks duplicate picks,
+            // this API must guarantee the invariant on its own — future callers
+            // might not be our popup. No error channel in a tuple, so we normalize.
+            var a = TeamCatalog.GetOrFirst(teamAId).Id;
+            if (a == TeamCatalog.GetOrFirst(teamBId).Id)
+                teamBId = TeamCatalog.All.First(t => t.Id != a).Id;
+
             code = GenerateCodeLocked();
             token = Guid.NewGuid().ToString("N");
-            var room = new Room(code, alias, token);
+            var room = new Room(code, alias, token)
+            {
+                Name = GenerateNameLocked(),
+                IsPrivate = isPrivate,
+                TeamAId = a,                                  // reuse the resolved id
+                TeamBId = TeamCatalog.GetOrFirst(teamBId).Id,
+            };
             room.Participants.Add(new RoomParticipant(token, alias, ParticipantKind.Player, Team.A));
             _rooms[code] = room;
         }
@@ -339,5 +358,13 @@ public class RoomManager
         }
     }
 
+    private string GenerateNameLocked()
+    {
+        while (true)
+        {
+            var name = $"{Cities[Random.Shared.Next(Cities.Length)]} {Nouns[Random.Shared.Next(Nouns.Length)]}";
+            if (_rooms.Values.All(r => r.Name != name)) return name;
+        }
+    }
     private void RaiseChanged() => RoomsChanged?.Invoke();
 }
